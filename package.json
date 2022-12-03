@@ -1,0 +1,12 @@
+{
+  "name": "build-your-own-react",
+  "version": "1.0.0",
+  "description": "> 리액트 만들어보기",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

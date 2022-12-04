@@ -51,3 +51,78 @@
     - JSX 파싱한것을 type에 맞춰 Node 객체를 만들고, 내부에 children값을 채워 넣은 뒤, `container`에 `appendChild()`를 이용해서 자식으로 추가한다.
 
 <br>
+
+## Step 1. The createElement Function
+- 아래 코드를 [`@babel/plugin-transform-react-jsx`](https://babeljs.io/docs/en/babel-plugin-transform-react-jsx#usage) 플러그인을 통해 `createElement()` 컴파일되게 한다.
+```js
+const element = (
+  <div id="foo">
+    <a>bar</a>
+    <b />
+  </div>
+)
+```
+- 우리는 가짜 리액트이기 때문에 `Didact`모듈을 만들고 여기다가 `createElement()`를 구현한다.
+```js
+// Didact/indexx.js
+function createElement(type, props, ...children) {
+  return {
+    type,
+    props: {
+      ...props,
+      children: children.map((child) =>
+        typeof child === "object" ? child : createTextElement(child)
+      ),
+    },
+  };
+}
+
+function createTextElement(text) {
+  return {
+    type: "TEXT_ELEMENT",
+    props: {
+      children: text,
+    },
+  };
+}
+
+export default Didact = { createElement };
+```
+- `children`은 여러개가 될 수 있기 때문에 배열이 된다. 이 때, `children`은 텍스트, 숫자 등 원시값이 들어올 수 있는데, 이것도 `createTextElement()` 함수를 통해 `"TEXT_ELEMENT"` 타입의 객체로 만들어준다.(이 객체의 children에는 무조건 원시값이 들어가게 된다.) 
+- `plugin-transform-react-jsx`플러그인은 JSX를 컴파일해서 `React.createElement()`로 바꿔주는데, 주석을 통해 사용 함수를 바꿔줄 수 있다.
+```js
+/** @jsx Didact.createElement */
+import Didact from "./Didact"
+
+const element = (
+  <div id="foo">
+    <a>bar</a>
+    <b />
+  </div>
+)
+```
+
+- 바벨 설치한다.
+```bash
+npm i --save @babel/plugin-transform-react-jsx @babel/core
+```
+- 바벨 설정파일을 작성한다.(`babelrc.json`)
+```json
+{
+  "plugins": ["@babel/plugin-transform-react-jsx"]
+}
+```
+- 컴파일해본다.
+```bash
+babel main.js
+```
+- 결과는 아래와 같다.
+```js
+/** @jsx Didact.createElement */
+import Didact from "./Didact";
+const element = Didact.createElement("div", {
+  id: "foo"
+}, Didact.createElement("a", null, "bar"), Didact.createElement("b", null));
+```
+
+<br>

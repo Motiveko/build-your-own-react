@@ -4,9 +4,15 @@
   "description": "> 리액트 만들어보기",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "babel main.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/plugin-transform-react-jsx": "^7.19.0"
+  },
+  "dependencies": {
+    "@babel/core": "^7.20.5"
+  }
 }

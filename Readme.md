@@ -161,3 +161,32 @@ export default Didact = { createElement, render };
 
 ## Step 3. Concurrent Mode
 - Step2에서 구현한 `render()` 함수는 동기적으로 동작한다. 호출시 메인스레드를 블로킹한다는 의미인데, DOM tree가 클 경우 이게 동작하는동안 웹이 멈추게된다.
+- [`window.requestIdleCallback()`](https://developer.mozilla.org/ko/docs/Web/API/Window/requestIdleCallback)은 메인스레드가 idle(쉬는) 상태 일 때에만 작업을 하도록 할 수 있는 함수다. 따라서 사용자가 input을 주거나 애니메이션이 동작하는 등의 상황을 피해서 원하는 작업을 할 수 있는 함수. 이 메서드를 이용해서 랜더링을 수행한다.
+  - 참고로 리액트도 원래 `requestIdelCallback`을 썼으나 현재는 [`scheduler packages`](https://github.com/facebook/react/tree/main/packages/scheduler)라는걸 사용한다고 한다. 어쨋든 목적은 똑같다.
+
+- 대략 아래와 같이 구현한다.
+```js
+let nextUnitOfWork = null;
+
+function workLoop(deadline) {
+  let shouldYield = false;
+  while(nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+  
+  requestIdleCallback(workLoop);
+}
+
+requestIdleCallback(workLoop);
+
+function performUnitOfWork(nextUnitOfWork) {
+  // TODO...
+}
+```
+  - `nextUnitOfWork`는 수행해야할 작업이다.
+  - `workLoop`는 `requestIdleCallback()`에 전달할 콜백으로, deadline의 조건에 따라 nextUnitOfWork(랜더링)을 수행한다. 인자로 `IdleDeadLine`을 받는데, 이게 하는 역할은 브라우저가 메인스레드를 사용해야할 시간 같은것들을 알려준다. `shouldYield`는 브라우저가 메인스레드 가져가기까지 1ms 이내로 남았는지 여부로, 1ms 이내면 랜더링을 잠깐 멈추고 다시 `requestIdleCallback()`을 통해 랜더링 작업을 등록하게 된다.
+  - `requestIdleCallback(workLoop);`를 호출해서 workLoop를 최초 등록해줘야한다.
+  - `performUnitOfWork()`는 랜더링 일부를 실행하고 다음 작업을 돌려준다. 구현해야한다.
+
+<br>

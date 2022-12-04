@@ -126,3 +126,38 @@ const element = Didact.createElement("div", {
 ```
 
 <br>
+
+## Step 2. The render Function
+- 우선 DOM을 추가하는 기능만 구현한다. update, delete는 나중에..
+- `ReactDOM.render()`는 DOM tree를 만들어주는 함수다. React Element 객체를 재귀적으로 호출하여 트리 구조를 만든다.
+```js
+// Didact/index.js
+
+// ...
+
+function render(element, container) {
+  // TEXT_ELEMENT는 textNode로 만든다.
+  const dom =
+    element.type !== "TEXT_ELEMENT"
+      ? document.createElement(element.type)
+      : document.createTextNode("");
+
+  const isProperty = (key) => key !== 'children'
+
+  Object.keys(dom.props)
+    .filter(isProperty)
+    .forEach(key => dom[key] = element.props[key]);
+
+  // 자식들을 재귀적으로 호출
+  element.props.children.forEach(child => render(child, dom));
+  
+  container.appendChild(dom);
+}
+
+export default Didact = { createElement, render };
+```
+
+<br>
+
+## Step 3. Concurrent Mode
+- Step2에서 구현한 `render()` 함수는 동기적으로 동작한다. 호출시 메인스레드를 블로킹한다는 의미인데, DOM tree가 클 경우 이게 동작하는동안 웹이 멈추게된다.

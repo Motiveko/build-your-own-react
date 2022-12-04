@@ -1,6 +1,7 @@
 /** @jsx Didact.createElement */
 import Didact from "./Didact"
 
+
 const element = (
   <div id="foo">
     <a>bar</a>
@@ -8,4 +9,4 @@ const element = (
   </div>
 )
 const container = document.getElementById("root")
-ReactDOM.render(element, container)
+Didact.render(element, container)

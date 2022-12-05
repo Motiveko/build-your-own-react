@@ -190,3 +190,15 @@ function performUnitOfWork(nextUnitOfWork) {
   - `performUnitOfWork()`는 랜더링 일부를 실행하고 다음 작업을 돌려준다. 구현해야한다.
 
 <br>
+
+## Step 4. Fibers
+- fiber는 createElement를 통해 만든 DOM 트리의 하나의 노드라고 보면 된다. 부모, 직계형재, 자식하나에 대한 참조를 가지고 있고, 이걸 이용해서 트리를 순회할 수 있다.
+- `render()`함수는 fiber를 기반으로 분리된다.
+  - `createDom(fiber)`: fiber를 받아서 DOM 객체를 만들고 프로퍼티를 등록한다. 자신만 하고 자식은 건들지 않는다.
+  - `render(element, container)`: 인자로 fiber 객체를 만든다. dom과 자식하나만 가진다. 이걸 `nextUnitOfWork`에 할당한다. 즉 `nextUnitOfWork`는 fiber 객체로, 하나의 노드 랜더링 과정이라고 보면된다.
+  - `performUnitOfWork(fiber)`: 총 세가지 역할을 한다.
+    - DOM이 없으면 생성하고, 부모요소에 appendChild한다.
+    - 자식을 순회하면서 `fiber`를 만들고 부모-자식, 형제-형제 참조를 넣어준다. 다 1:1이다.
+    - 깊이 우선 탐색으로 fiber를 리턴한다. 자식이 있으면 리턴하고, 없으면 형재를, 없으면 부모의 형재를,.. 하는 식으로 fiber를 리턴하고 이는 `requestIdleCallback`에 의해 순서대로 처리될 것이다.
+
+- 커밋 로그를 참고하자. 코드가 꽤 복잡하다!

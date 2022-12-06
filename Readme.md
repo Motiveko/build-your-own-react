@@ -202,3 +202,60 @@ function performUnitOfWork(nextUnitOfWork) {
     - 깊이 우선 탐색으로 fiber를 리턴한다. 자식이 있으면 리턴하고, 없으면 형재를, 없으면 부모의 형재를,.. 하는 식으로 fiber를 리턴하고 이는 `requestIdleCallback`에 의해 순서대로 처리될 것이다.
 
 - 커밋 로그를 참고하자. 코드가 꽤 복잡하다!
+
+<br>
+
+## Step 5. Render and Commit Phases
+- `performUnitOfWork()`의 아래 코드는 문제가 된다.
+```js
+function performUnitOfWork(fiber) {
+  // ...
+  if (fiber.parent) {
+    fiber.parent.dom.appendChild(fiber.dom)
+  }
+​
+  // ...
+}
+```
+- dfs로 fiber 트리를 탐색하면서 매번 부모요소에 `appendChild()`를 하는데, 이러면 root 노드부터 하나씩 랜더링 될 것이다. `requestIdleCallback()`로 랜더링을 수행하기 때문에 중간중간에 끊기면서 랜더링 될 수 있게 되는데, 이는 우리가 원하는게 아니다.
+- 이를 위해서 `Render Phase`, `Commit Phase`를 만드는 것이다. `Render Phase`에서는 fiber 트리를 만들고, fiber 트리가 완성되면(`performUnitOfWork(fiber)`가 더이상 fiber를 반환하지 않는 순간!) commit 페이즈에서 한꺼번에 랜더링 하는 것이다. fiber 트리의 루트는 `render()`에서 만들어진다.
+- commit 함수를 살펴보자
+```js
+function commitRoot() {
+  commitWork(wippRoot.child);
+  wipRoot = null;
+}
+
+function commitWork(fiber) {
+  if(!fiber) {
+    return
+  }
+  const domParent = fiber.parent.dom;
+  domParent.appendChild(fiber.dom);
+  commitWork(fiber,child);
+  commitWork(fiber.sibling);
+}
+
+function render(element, container) {
+  nextUnitOfWork = wipRoot = {
+    dom: container,
+    props: {
+      children: [element],
+    },
+  };
+}
+let nextUnitOfWork = null;
+let wipRoot = null;
+
+function workLoop(deadline) {
+  // ...
+    if(!nextUnitOfWork && wipRoot) {
+    commitRoot();
+  }
+  // ...
+}
+```
+- `commitWork()` 함수의 동작을 보면 루트 노드를 바로 컨테이너(`#app`)에 꽂고 그 뒤 자식을 꽂고.. 이런식으로 수행되는데, 이건 비효율 적이지 않을까? 루트 노드의 자식을 모두 `appendChild()` 한 뒤 마지막에 컨테이너에 루트 노드를 꽂으면 좋을 것 같은데.🤔
+  - 이건 문제가 안된다. 왜냐면 `commitRoot()`는 동기적으로 호출되기 때문에, 이게 끝나야 DOM 트리를 다시 랜더링 하기 때문이다! `performUnitOfWork()`는 노드마다 쪼개서 수행되지만 `commitRoot()`는 재귀호출로 중간에 방해받지 않고 실행된다! 👍
+
+<br>

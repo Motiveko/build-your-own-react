@@ -259,3 +259,55 @@ function workLoop(deadline) {
   - 이건 문제가 안된다. 왜냐면 `commitRoot()`는 동기적으로 호출되기 때문에, 이게 끝나야 DOM 트리를 다시 랜더링 하기 때문이다! `performUnitOfWork()`는 노드마다 쪼개서 수행되지만 `commitRoot()`는 재귀호출로 중간에 방해받지 않고 실행된다! 👍
 
 <br>
+
+## Step 6. Reconciliation
+- `React.render()`를 하면 render phase를 동해 fiber 트리(가상돔)를 생성하고, commit phase를 통해 가상돔을 리얼돔에 반영한다. 하지만 리액트는 여기서 Reconciliation이라는 과정의 최적화를 한다.
+- 최적화를 하는 이유는 기본적으로 `document.createElement()`를 하는데 비용이 많이 들기 때문이다. 이를 줄이기 위해 이전에 사용했던 dom을 재활용한다.
+- 이전에 commit 된 fiber tree(`old fiber`)를 참조로 가지고 있다가 다음 다음 Render Phase에서 새로운 fiber tree를 각 fiber node마다 같은 위치의 old fiber node와 `type`을 비교한다.
+```js
+function reconcileChildren(wipFiber, elements) {
+  // ...
+
+  const sameType = oldFiber && element && element.type === oldFiber.type;
+  
+  // ...
+}
+```
+- 같은 타입이라면, `document.createElement()`,`parentdom.appendChild(childDom)`같은 메서드를 호출할 필요가 없다. old fiber node에는 이미 dom객체의 참조를 가지고 있기 때문에 여기다가 새로운 fiber의 props를 업데이트 해주기만 하면 된다.(=> `effectTag: UPDATE`)
+```js
+function updateDom(dom, prevProps, nextProps) {
+  // dom의 프로퍼티를 prevProps => nextProps로 업데이트
+}
+```
+- 다른 타입이라면, 해당 fiber node의 자식요소 전체가 변경이 이뤄졌다고 판단하고, 자식 요소에서는 old fiber node와 타입 비교를 수행하지 않는다.(=> 새로 node 생성, `effectTag: REPLACEMENT`)
+- 그리고 old fiber 에는 `effectTag: DELETION`를 붙이고, commit Phase에서 `parent.removeChild(fiber.dom)`을 통해 화면에서 제거하는 작업을 수행한다.
+```js
+function commitRoot() {
+  // 커밋 페이즈 시작
+  deletions.forEach(commitWork);  // 먼저 effectTag: DELETION를 먼저 지운다. 재귀호출로 자식요소 전체를 제거할것이다.
+  commitWork(wippRoot.child);
+  
+  // ...
+}
+function commitWork(fiber) {
+  // ...
+  if (
+    fiber.effectTag === "PLACEMENT" &&
+    fiber.dom != null // null check..?
+  ) {
+    domParent.appendChild(fiber.dom);
+  } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
+    // 이미 사용중인 dom의 properties만 바꾸는것. appendChild 할 필요가없다.(자식을 update한다는건 부모도 update 했다는 뜻)
+    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  } else if (fiber.effectTag === "DELETION") { // old fiber의 경우에만 실행됨
+    domParent.removeChild(fiber.dom);
+  }
+  // ...
+}
+```
+
+> 리액트는 Reconciliation에 fiber의 타입 비교 외에 `key`값을 이용해서 비교하게 된다. 여기서 알 수 있는건, `key`값은 같은  위치에 있는 형제노드들 내에서만 고유하면 된다는 것이다. 결국 `Array.prototype.map()`으로 랜더링시 쓰이는건데, 중요한점은 key값이 같은 형제를 비교하기 때문에 순서는 정확하게 모른단거다. array index를 `key`값에 포함시키면 위험한 이유다.
+
+- 이외 상세한 코드는 커밋로그 참고. 
+
+<br>

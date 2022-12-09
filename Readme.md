@@ -311,3 +311,129 @@ function commitWork(fiber) {
 - 이외 상세한 코드는 커밋로그 참고. 
 
 <br>
+
+## Step 7. Function Components
+### 7.1 함수형 컴포넌트 특징
+- 함수형 컴포넌트의 특징은 `children`이란걸 `props`로 받는다는 것이다. 예를들면..
+```jsx
+const element = <App>
+  <Component1 />
+  <Component2 />
+  <div>div</div>
+</App>
+```
+- 이 element는 `props.children`은 `[<Component1 />, <Component2 />, <div>div</div>]`가 된다. 중요한건 ***`children`은 fiber 트리의 children이 아니라는것이다.*** ***함수형 컴포넌트는 오로지 하나의 자식(element or component)만 반환할 수 있기 때문에 fiber 트리에서 자식은 하나다!***
+```jsx
+const App = ({children}) => {
+  return (
+    <div>
+      {children}
+    </div>
+  )
+}
+```
+- 이 App 컴포넌트의 자식은 결국 div 요소 하나다! 이 제약사항이 앞으로 함수 구현에 중요하게 사용된다.
+
+<br>
+
+### 7.2 구현
+- 함수형 컴포넌트는 반환값이 `jsx`다. 아래와 같은 간단한 함수형 컴포넌트를 babel로 컴파일해보면..
+```jsx
+// fc.js
+/** @jsx Didact.createElement */
+import Didact from "./Didact"
+
+// 1
+function App(props) {
+  return <h1>Hi {props.name}</h1>
+}
+
+// 2
+const element = <App name="foo" />
+const container = document.getElementById("root")
+
+Didact.render(element, container)
+
+// 바벨로 컴파일한 결과
+
+// 2
+function App(props) { 
+  return Didact.createElement("h1", null, "Hi ", props.name);
+}
+
+// 2
+const element = Didact.createElement(App, {
+  name: "foo"
+});
+```
+
+- element의 타입은 `App`이라는 `Function`이다. fiber 타입이 string이 아니게 되었는데, 이에 대한 처리를 해줘야 한다. `performUnitOfWork`에서..
+```js
+function performUnitOfWork(fiber) {
+  const isFunctionComponent = fiber.type instanceof Function;
+  if(isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
+  }
+
+  // ...
+}
+
+function updateFunctionComponent(fiber) {
+  const children = [fiber.type(fiber.props)]; // fc 실행.. => [ 요소한개 ] 가 반환될거다.
+  reconcileChildren(fiber, children);
+}
+
+function updateHostComponent(fiber) {
+  // 원래 하던거 그대로..
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  reconcileChildren(fiber, fiber.props.children);
+}
+```
+
+- `reconcileChildren()`는 기능 변화가 없다. 즉 sameType을 똑같은 방식으로 검사하게 되는데, 결국 트리상의 같은 위치에 있던 함수형 컴포넌트가 다른 함수형 컴포넌트로 바뀌면(!sameType) oldFiber에 `DELETION` 태그를 붙이고 재활용 하지 않는다는것이다.(설령 다른 두 컴포넌트가 같은 dom 요소를 반환하는것이라고 해도)
+
+<br>
+
+- `updateFunctionComponent()`를 보면 fiber.dom에 돔 요소를 할당하지 않는다. 즉 ***fiber 트리에서 타입이 Function인 노드는 dom을 가지고 있지 않게 된다!*** 따라서 commit phase에도 수정이 필요하다.
+```js
+function commitWork(fiber) {
+  // ...
+
+
+  // const domParent = fiber.parent.dom; 
+  // parent fiber가 FC인 경우 fiber.dom이 없기 때문에 dom을 가진 fiber가 나올때까지 계속 트리 위로 올라간다.
+  let domParentFiber = fiber.parent;
+  while(!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+  const domParent = domParentFiber.dom;
+
+  if(...) {
+    // ....
+
+  } else if (fiber.effectTag === "DELETION") { // old fiber의 경우에만 실행됨
+    // domParent.removeChild(fiber.dom);
+    commitDeletion(fiber, domParent);
+  }
+}
+
+function commitDeletion(fiber, domParent) {
+  /**
+   * FC의 경우 지우려고 해도 dom이 없기 때문에 dom이 나올때까지 자식 노드로 접근해서 지운다. 
+   * 이게 가능한 이유는, React의 FC는 dom이든 FC든 **하나의 요소**만 반환할 수 있기 때문이다.(트리상 자식은 하나)
+   */
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom)
+  } else {
+    commitDeletion(fiber.child, domParent)
+  }
+}
+```
+- FC에는 dom이 없는것과, FC의 자식은 무조건 하나라는 특징을 이용해 `domParent`를 조회하고, old fiber의 deletion을 수행한다.
+
+<br>
+

@@ -1,4 +1,3 @@
-import { DEFAULT_EXTENSIONS } from "@babel/core";
 
 function createElement(type, props, ...children) {
   return {
@@ -31,7 +30,7 @@ function createDom(fiber) {
 
   return dom;
 }
-const is1 = (key) => key.startsWith("on");
+const isEvnet = (key) => key.startsWith("on");
 const isProperty = (key) => key !== "children" && !isEvent(key);
 const isNew = (prev, next) => (key) => prev[key] !== next[key];
 const isGone = (prev, next) => (key) => !(key in next);
@@ -85,23 +84,41 @@ function commitWork(fiber) {
   if (!fiber) {
     return;
   }
-  const domParent = fiber.parent.dom;
+
+  // parent fiber가 FC인 경우 fiber.dom이 없기 때문에 dom을 가진 fiber가 나올때까지 계속 트리 위로 올라간다.
+  let domParentFiber = fiber.parent;
+  while(!domParentFiber.dom) {
+    domParentFiber = domParentFiber.parent;
+  }
+  const domParent = domParentFiber.dom;
 
   if (
     fiber.effectTag === "PLACEMENT" &&
-    fiber.dom != null // null check..?
+    fiber.dom != null // null check.. => FC의 경우 dom이 없을수도 있다.
   ) {
     domParent.appendChild(fiber.dom);
   } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
     // 이미 사용중인 dom의 properties만 바꾸는것. appendChild 할 필요가없다.(자식을 update한다는건 부모도 update 했다는 뜻)
     updateDom(fiber.dom, fiber.alternate.props, fiber.props);
   } else if (fiber.effectTag === "DELETION") { // old fiber의 경우에만 실행됨
-    domParent.removeChild(fiber.dom);
+    // domParent.removeChild(fiber.dom);
+    commitDeletion(fiber, domParent);
   }
 
-  domParent.appendChild(fiber.dom);
   commitWork(fiber, child);
   commitWork(fiber.sibling);
+}
+
+function commitDeletion(fiber, domParent) {
+  /**
+   * FC의 경우 지우려고 해도 dom이 없기 때문에 dom이 나올때까지 자식 노드로 접근해서 지운다. 
+   * 이게 가능한 이유는, React의 FC는 dom이든 FC든 **하나의 요소**만 반환할 수 있기 때문이다.(트리상 자식은 하나)
+   */
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom)
+  } else {
+    commitDeletion(fiber.child, domParent)
+  }
 }
 
 function render(element, container) {
@@ -138,14 +155,12 @@ function workLoop(deadline) {
 requestIdleCallback(workLoop);
 
 function performUnitOfWork(fiber) {
-  // * add dom node
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if(isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
   }
-
-  // * create new fibers
-  const elements = fiber.props.children;
-  reconcileChildren(fiber, elements);
 
   // * return next unit of work
   if (fiber.child) {
@@ -160,6 +175,21 @@ function performUnitOfWork(fiber) {
     nextFiber = nextFiber.parent; // 형재가 없으면 부모로 간다. 부모에서 while문이 돌아서 부모의 형재(uncle)이 있으면 리턴할것이다. 없다면 할아버지로 이동하겠지..
   }
   // 깊이 우선 탐색이 끝나고 #root의 자식을 다 돌고 나서 끝난다.
+}
+
+function updateFunctionComponent(fiber) {
+  const children = [fiber.type(fiber.props)]; // fc 실행
+  reconcileChildren(fiber, children);
+}
+
+function updateHostComponent(fiber) {
+  // * add dom node
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+
+  // * create new fibers(by reconcile)
+  reconcileChildren(fiber, fiber.props.children);
 }
 
 function reconcileChildren(wipFiber, elements) {
@@ -219,4 +249,5 @@ function reconcileChildren(wipFiber, elements) {
   }
 }
 
-export default Didact = { createElement, render };
+const Didact = { createElement, render };
+export default Didact;

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "> 리액트 만들어보기",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "build": "babel main.js"
   },

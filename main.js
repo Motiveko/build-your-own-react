@@ -8,5 +8,5 @@ const element = (
   </div>
 )
 
-const container = document.getElementById("root")
-Didact.render(element, container)
+const container = document.getElementById("root");
+Didact.render(element, container);

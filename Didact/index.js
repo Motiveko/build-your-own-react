@@ -1,9 +1,15 @@
+// FOR JEST ENVIROMENT
+if (!window.requestIdleCallback) {
+  window.requestIdleCallback = () => {};
+}
+
 function createElement(type, props, ...children) {
   return {
     type,
     props: {
       ...props,
-      children: children.map((child) => typeof child === "object" ? child : createTextElement(child)
+      children: children.map((child) =>
+        typeof child === "object" ? child : createTextElement(child)
       ),
     },
   };
@@ -14,7 +20,7 @@ function createTextElement(text) {
     type: "TEXT_ELEMENT",
     props: {
       nodeValue: text,
-      children: [],    
+      children: [],
     },
   };
 }
@@ -29,9 +35,11 @@ function createDom(fiber) {
   return dom;
 }
 const isEvent = (key) => key.startsWith("on");
-const isProperty = (key) => key !== "children" && !isEvent(key);
+const isProperty = (key) =>
+  key !== "children" && !isEvent(key) && key !== "style";
 const isNew = (prev, next) => (key) => prev[key] !== next[key];
 const isGone = (prev, next) => (key) => !(key in next);
+
 function updateDom(dom, prevProps, nextProps) {
   // Remove old or changed event listeners
   Object.keys(prevProps)
@@ -63,6 +71,23 @@ function updateDom(dom, prevProps, nextProps) {
       dom[name] = nextProps[name];
     });
 
+  const prevStyle = prevProps.style || {};
+  const nextStyle = nextProps.style || {};
+
+  // Remove old style
+  Object.keys(prevStyle)
+    .filter(isGone(prevStyle, nextStyle))
+    .forEach((name) => {
+      delete dom.style[name];
+    });
+
+  // set new style
+  Object.keys(nextStyle)
+    .filter(isNew(prevStyle, nextStyle))
+    .forEach((name) => {
+      dom.style[name] = nextStyle[name];
+    });
+
   // Add event listeners
   Object.keys(nextProps)
     .filter(isEvent)
@@ -74,7 +99,6 @@ function updateDom(dom, prevProps, nextProps) {
 }
 
 function commitRoot() {
-  
   deletions.forEach(commitWork); // old fiber의 deletion 되는 애들은 다 제거한다.
   commitWork(wipRoot.child);
   currentRoot = wipRoot;
@@ -106,13 +130,12 @@ function commitWork(fiber) {
      * * old fiber의 경우에만 실행됨
      * * 강의에 버그가 있는데, return을 해줘서 더이상 commitWork가 실행되지 않도록 해야 한다. 왜냐면 oldfiber는 지우기만 할 뿐이기 때문이다.
      */
-    return commitDeletion(fiber, domParent);  
+    return commitDeletion(fiber, domParent);
   }
 
   commitWork(fiber.child);
   commitWork(fiber.sibling);
 }
-
 
 function commitDeletion(fiber, domParent) {
   /**
@@ -193,7 +216,6 @@ function updateFunctionComponent(fiber) {
 }
 
 function useState(initial) {
-  debugger
   const oldHook =
     wipFiber.alternate &&
     wipFiber.alternate.hooks &&
@@ -202,17 +224,17 @@ function useState(initial) {
   const hook = {
     state: oldHook ? oldHook.state : initial,
     queue: [],
-  }
+  };
 
   /**
-   * * setState에 전달한 상태변경 action수행. 
+   * * setState에 전달한 상태변경 action수행.
    * * setState 호출시 hook(결국 다음 랜더의 oldHook)의 queue에 액션을 넣고 nextUnitOfWork 재할당으로 render phase가 재실행된다.
    * * 이 때 FC 노드를 만나면 useState()가 호출되는데, 이 때 oldHook의 queue를 참조해야 setState()에서 전달한 action을 호출할 수 있게 된다.(다음 랜더이기 때문이다.. 복잡하다..)
    */
-  const actions = oldHook ? oldHook.queue : []
-  actions.forEach(action => {
-    hook.state = action(hook.state)
-  })
+  const actions = oldHook ? oldHook.queue : [];
+  actions.forEach((action) => {
+    hook.state = action(hook.state);
+  });
 
   const setState = (action) => {
     hook.queue.push(action);
@@ -221,10 +243,10 @@ function useState(initial) {
       dom: currentRoot.dom,
       props: currentRoot.props,
       alternate: currentRoot,
-    }
-    nextUnitOfWork = wipRoot
-    deletions = []
-  }
+    };
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  };
 
   wipFiber.hooks.push(hook);
   hookIndex++;

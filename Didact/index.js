@@ -1,11 +1,9 @@
-
 function createElement(type, props, ...children) {
   return {
     type,
-    props: { 
+    props: {
       ...props,
-      children: children.map((child) =>
-        typeof child === "object" ? child : createTextElement(child)
+      children: children.map((child) => typeof child === "object" ? child : createTextElement(child)
       ),
     },
   };
@@ -15,7 +13,8 @@ function createTextElement(text) {
   return {
     type: "TEXT_ELEMENT",
     props: {
-      children: text,
+      nodeValue: text,
+      children: [],    
     },
   };
 }
@@ -25,27 +24,28 @@ function createDom(fiber) {
     fiber.type == "TEXT_ELEMENT"
       ? document.createTextNode("")
       : document.createElement(fiber.type);
-
-  updateDom(fiber.dom, {}, fiber.props);
+  updateDom(dom, {}, fiber.props);
 
   return dom;
 }
-const isEvnet = (key) => key.startsWith("on");
+const isEvent = (key) => key.startsWith("on");
 const isProperty = (key) => key !== "children" && !isEvent(key);
 const isNew = (prev, next) => (key) => prev[key] !== next[key];
 const isGone = (prev, next) => (key) => !(key in next);
 function updateDom(dom, prevProps, nextProps) {
   // Remove old or changed event listeners
   Object.keys(prevProps)
-    .filter(isEvnet)
+    .filter(isEvent)
     .filter(
       (key) =>
         // isGone or isNew, 업데이트가 안되기 때문에 무조건 지운다.
-        !(key in next) || prev[key] !== next[key]
-    ).forEach(name => {
+        !(key in nextProps) || prevProps[key] !== nextProps[key]
+    )
+    .forEach((name) => {
       const eventType = name.toLowerCase().substring(2);
       dom.removeEventListener(eventType, prevProps[name]);
-    })
+    });
+
   // Remove old props
   Object.keys(prevProps)
     .filter(isProperty)
@@ -60,7 +60,7 @@ function updateDom(dom, prevProps, nextProps) {
     .filter(isProperty)
     .filter(isNew(prevProps, nextProps))
     .forEach((name) => {
-      dome[name] = nextProps[name];
+      dom[name] = nextProps[name];
     });
 
   // Add event listeners
@@ -74,8 +74,9 @@ function updateDom(dom, prevProps, nextProps) {
 }
 
 function commitRoot() {
-  deletions.forEach(commitWork);  // old fiber의 deletion 되는 애들은 다 제거한다.
-  commitWork(wippRoot.child);
+  
+  deletions.forEach(commitWork); // old fiber의 deletion 되는 애들은 다 제거한다.
+  commitWork(wipRoot.child);
   currentRoot = wipRoot;
   wipRoot = null;
 }
@@ -87,7 +88,7 @@ function commitWork(fiber) {
 
   // parent fiber가 FC인 경우 fiber.dom이 없기 때문에 dom을 가진 fiber가 나올때까지 계속 트리 위로 올라간다.
   let domParentFiber = fiber.parent;
-  while(!domParentFiber.dom) {
+  while (!domParentFiber.dom) {
     domParentFiber = domParentFiber.parent;
   }
   const domParent = domParentFiber.dom;
@@ -100,24 +101,28 @@ function commitWork(fiber) {
   } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
     // 이미 사용중인 dom의 properties만 바꾸는것. appendChild 할 필요가없다.(자식을 update한다는건 부모도 update 했다는 뜻)
     updateDom(fiber.dom, fiber.alternate.props, fiber.props);
-  } else if (fiber.effectTag === "DELETION") { // old fiber의 경우에만 실행됨
-    // domParent.removeChild(fiber.dom);
-    commitDeletion(fiber, domParent);
+  } else if (fiber.effectTag === "DELETION") {
+    /**
+     * * old fiber의 경우에만 실행됨
+     * * 강의에 버그가 있는데, return을 해줘서 더이상 commitWork가 실행되지 않도록 해야 한다. 왜냐면 oldfiber는 지우기만 할 뿐이기 때문이다.
+     */
+    return commitDeletion(fiber, domParent);  
   }
 
-  commitWork(fiber, child);
+  commitWork(fiber.child);
   commitWork(fiber.sibling);
 }
 
+
 function commitDeletion(fiber, domParent) {
   /**
-   * FC의 경우 지우려고 해도 dom이 없기 때문에 dom이 나올때까지 자식 노드로 접근해서 지운다. 
+   * FC의 경우 지우려고 해도 dom이 없기 때문에 dom이 나올때까지 자식 노드로 접근해서 지운다.
    * 이게 가능한 이유는, React의 FC는 dom이든 FC든 **하나의 요소**만 반환할 수 있기 때문이다.(트리상 자식은 하나)
    */
   if (fiber.dom) {
-    domParent.removeChild(fiber.dom)
+    domParent.removeChild(fiber.dom);
   } else {
-    commitDeletion(fiber.child, domParent)
+    commitDeletion(fiber.child, domParent);
   }
 }
 
@@ -156,7 +161,7 @@ requestIdleCallback(workLoop);
 
 function performUnitOfWork(fiber) {
   const isFunctionComponent = fiber.type instanceof Function;
-  if(isFunctionComponent) {
+  if (isFunctionComponent) {
     updateFunctionComponent(fiber);
   } else {
     updateHostComponent(fiber);
@@ -177,9 +182,53 @@ function performUnitOfWork(fiber) {
   // 깊이 우선 탐색이 끝나고 #root의 자식을 다 돌고 나서 끝난다.
 }
 
+let wipFiber = null;
+let hookIndex = null;
 function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
   const children = [fiber.type(fiber.props)]; // fc 실행
   reconcileChildren(fiber, children);
+}
+
+function useState(initial) {
+  debugger
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  const hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: [],
+  }
+
+  /**
+   * * setState에 전달한 상태변경 action수행. 
+   * * setState 호출시 hook(결국 다음 랜더의 oldHook)의 queue에 액션을 넣고 nextUnitOfWork 재할당으로 render phase가 재실행된다.
+   * * 이 때 FC 노드를 만나면 useState()가 호출되는데, 이 때 oldHook의 queue를 참조해야 setState()에서 전달한 action을 호출할 수 있게 된다.(다음 랜더이기 때문이다.. 복잡하다..)
+   */
+  const actions = oldHook ? oldHook.queue : []
+  actions.forEach(action => {
+    hook.state = action(hook.state)
+  })
+
+  const setState = (action) => {
+    hook.queue.push(action);
+    // * setState 호출시 랜더 페이즈가 다시 시작될 수 있게 한다.
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot,
+    }
+    nextUnitOfWork = wipRoot
+    deletions = []
+  }
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return [hook.state, setState];
 }
 
 function updateHostComponent(fiber) {
@@ -200,7 +249,7 @@ function reconcileChildren(wipFiber, elements) {
   while (index < elements.length || oldFiber != null) {
     // * oldFiber not null은 왜 있는걸까..
     const element = elements[index];
-    const newFiber = null;
+    let newFiber = null;
 
     // * compare oldFiber to element
     const sameType = oldFiber && element && element.type === oldFiber.type;
@@ -249,5 +298,5 @@ function reconcileChildren(wipFiber, elements) {
   }
 }
 
-const Didact = { createElement, render };
+const Didact = { createElement, render, useState };
 export default Didact;

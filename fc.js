@@ -1,11 +1,39 @@
 /** @jsx Didact.createElement */
-import Didact from "./Didact"
+import Didact from "./Didact/index.js";
 
-function App(props) {
-  return <h1>Hi {props.name}</h1>
+function ResultOdd({ data }) {
+  const [name, _] = Didact.useState("Odd");
+  return (
+    <div>
+      Result {name}: {data}
+    </div>
+  );
 }
 
-const element = <App name="foo" />
-const container = document.getElementById("root")
+function ResultEven({ data }) {
+  const [name, _] = Didact.useState("Even");
+  return (
+    <div>
+      Result {name}: {data}
+    </div>
+  );
+}
 
-Didact.render(element, container)
+function Counter() {
+  const [count, setCount] = Didact.useState(1);
+  return (
+    <div>
+      <button onClick={() => setCount((v) => v + 1)}>클릭</button>
+      {count % 2 === 0 ? (
+        <ResultEven data={count} />
+      ) : (
+        <ResultOdd data={count} />
+      )}
+    </div>
+  );
+}
+
+const element = <Counter />;
+const container = document.getElementById("root");
+
+Didact.render(element, container);

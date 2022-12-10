@@ -437,3 +437,99 @@ function commitDeletion(fiber, domParent) {
 
 <br>
 
+
+## Step 8. Hooks
+- 훅 중 가장 가장 중요한 상태를 관리하는 `useState()`을 구현한다. 
+
+<br>
+
+### 8.1 setState의 특징
+- `useState()`는 스펙은 아래와 같다.
+```js
+const [state, setState] = useState(initialState);
+```
+- 인자로 초기 상태값을 전달하고, 현재 `state`와 state를 변경할 수 있는 `setState()`를 인자로 받는다. `setState`는 상태값을 받을 수도 있는데, 여기서는 `action( prevState => void )`을 인자로 받는 훅을 구현한다.
+
+- 리액트 훅에는 몇가지 특징/제약사항이 있다. 구현에 반영되어야 한다.
+  - `setState()`호출시 반드시 랜더링이 다시 되어야 한다.
+  - 훅은 반드시 매번 순서를 지켜서 실행되어야한다.(조건부 실행과 같은건 허용하지 않는다)
+  - 훅은 한꺼번에 모아서 처리한다. 아래 코드에서 버튼 클릭시 `setState()`가 여러번 호출되었지만 이건 결국 랜더링을 한번만 호출시킨다.
+  ```js
+  const App = () => {
+    const [count, setCount] = useState(0);
+    const onClick = () => {
+      setCount(c => c + 1);
+      setCount(c => c + 1);
+    }
+    return <button onClick={}>버튼</button>
+  }
+  ```
+
+<br>
+
+### 8.2 구현
+- `updateFunctionComponent()`함수에서 함수형 컴포넌트를 실행한다. 이 때 훅이 실행되는데, 여기서 훅에서 참조할 몇가지 `global 변수`가 필요하다. 현재 fiber node인 `wipFiber`, 훅의 순서를 참조할 `wipFiber.hooks`, 그리고 현재 훅의 index인 `hookIndex`다.
+```js
+// Didact/index.js
+let wipFiber = null;
+let hookIndex = null;
+function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  const children = [fiber.type(fiber.props)]; // fc 실행
+  reconcileChildren(fiber, children);
+}
+```
+- `setState`훅은 대략 아래와 같이 구현한다.
+```js
+function useState(initial) {
+  // 1
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  // 2
+  const hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: [],
+  }
+
+  // 3
+  const actions = oldHook ? oldHook.queue : []
+  actions.forEach(action => {
+    hook.state = action(hook.state)
+  })
+
+  // 4
+  const setState = (action) => {
+    hook.queue.push(action);
+    // 4.1
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot,
+    }
+    nextUnitOfWork = wipRoot
+    deletions = []
+  }
+
+  // 5
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+  return [hook.state, setState];
+}
+```
+- 각각에 대한 설명은 아래와 같다.
+  1. `fiber.alternate`은 이전 fiber다. 여기서 훅이 있는지를 확인하고 가져온다. 동일 컴포넌트(same type)가 다시 랜더링 되었다면 oldHook을 가져올 것이다. ***old hook을 `hookIndex`를 이용해서 가져오기 때문에 hook의 호출 순서가 일관되어야 한다는 제약이 있는것이다!***
+  2. 새로운 훅을 맨든다. state는 이전 상태가 있으면 가져오고 없으면 초기값을쓴다. `queue`는 `setState`에 action 전달시 쌓이게 된다!
+  3. queue에 쌓인 action을 모두 실행한다. action이 있고 상태를 변경시킨다면, 상태가 업데이트 될 것이고, 업데이트 된 상태를 가지고 컴포넌트를 랜더링을 할 것이다. 
+  4. `setState는` 랜더링 이후 사용자 액션에 의해 호출될것이다. hook의 queue에 action을 넣는다.
+    - 4.1에서는 `render()`함수의 내용을 수행한다. `currentRoot`라는 old fiber root을 가지고 새로운 fiber를 할당한다. 이렇게 해서 `re render`를 발생시키면, setState가 참조하는 `hook`는 다음 랜더링에서 `oldHook`이 되고 `oldHook.queue`를 순회하면서 상태 업데이트를 칠것이다. `queue`는 버퍼 역할을 해서 setState를 리랜더 한번에 모두 실행하게 한다.
+  5. `setState`훅을 `wipFiber.hook`에 넣고, `[state, setState]`를 반환한다.
+
+- 여기까지가 `setState`훅의 구현이다. `old fiber`를 활용하는 코드가 꽤 복잡한데, 디버깅을 해보면서 동작을 이해해야 한다.
+
+<br>
+

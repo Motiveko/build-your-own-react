@@ -4,7 +4,8 @@
 <br>
 
 ## 학습자료
-> https://pomb.us/build-your-own-react/
+>  BlogPost : https://pomb.us/build-your-own-react/  <br>
+> Repo: https://github.com/pomber/didact
 
 <br>
 
@@ -533,3 +534,10 @@ function useState(initial) {
 
 <br>
 
+## 9. Epilogue
+- 간단하게 리액트 컴포넌트와 훅을 구현하였다. `workLoop`, `performUnitOfWork`, `updateFunctionComponent` 함수들은 실제 리액트에서 그대로 쓰고 있고 `fiber`라던가 `wipFiber`, `effectTag`... 이런 키워드들도 그대로 쓰고 있다고 한다. 추후 리액트 소스분석시 유용할 것 같다.
+- 리액트는 이런 기본 뼈대 외에 여러가지 최적화가 추가되어 있다. 예를들어,
+  - Didact는 랜더 페이즈에서 전체 트리를 순회하지만, React는 힌트나 휴리스틱 알고리즘을 써서 변화가 없는 전체 sub tree를 순회하지 않게 하는 최적화가 되어있다.
+  - 커밋 페이즈에도 마찬가지로, React는 linked list를 이용해서 필요한 fiber만 방문할 수 있도록 되어 있다.
+  - Didact는 매 랜더링시 fiber tree를 통째로 다시 만들지만(`performUnitOfWork`에서) 리액트는 이전 트리를 잘 재활용한다.
+  - 랜더 페이즈에 있을 때, 새로운 랜더 발생시 Didact는 그대로 새로운 랜더 페이즈를 시작한다. (wip tree 통 갱신) React는 매 업데이트마다 `expiration timestamp`같은걸 둬서 업데이트에 우선순위를 둔다고 한다.
